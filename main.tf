@@ -11,35 +11,15 @@ terraform {
 }
 
 
-# # specify the required version and provider for GCP
-# terraform {
-#   required_providers {
-#     google = {
-#       source  = "hashicorp/google"
-#       version = "~> 3.0"
-#     }
-#   }
-#   required_version = ">= 1.1.0"
-# }
-
-
-# # Define GCP as provider
-# provider "google" {
-#   credentials = file("path/to/your/gcp_credentials.json")
-#   project     = "your_gcp_project_id"
-#   region      = "your_gcp_region"
-# }
-
 # Define AWS as provider
 provider "aws" {
-  region = "us-east-2"
+  region = "us_east_2"
 }
 
 
 # Create VPC
 resource "aws_vpc" "status_page_vpc" {
   cidr_block = "10.0.0.0/16"
-
 
   tags = {
     Name        = "status_page_vpc"
@@ -62,7 +42,6 @@ resource "aws_internet_gateway" "status_page_igw" {
 resource "aws_route_table" "status_page_route_table_igw" {
   vpc_id = aws_vpc.status_page_vpc.id
 
-
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.status_page_igw.id
@@ -79,7 +58,7 @@ resource "aws_eip" "EIP_NAT" {
   vpc = true
 
   tags = {
-    Name = "EIP-for-NAT"
+    Name        = "EIP-for-NAT"
     Description = "EIP assigned to NAT gateway"
   }
 }
@@ -87,9 +66,10 @@ resource "aws_eip" "EIP_NAT" {
 # Create the NAT gateway
 resource "aws_nat_gateway" "status_page_nat_gateway" {
   allocation_id = aws_eip.EIP_NAT.id
-  subnet_id = aws_subnet.status_page_public_subnet1.id
+  subnet_id     = aws_subnet.status_page_public_subnet1.id
+
   tags = {
-    Name = "status-page-nat-gateway"
+    Name        = "status-page-nat-gateway"
     Description = "status-page-nat-gateway"
   }
 }
@@ -98,12 +78,10 @@ resource "aws_nat_gateway" "status_page_nat_gateway" {
 resource "aws_route_table" "private_subnet_route_table" {
   vpc_id = aws_vpc.status_page_vpc.id
 
-
   route {
     cidr_block     = "10.0.1.0/24"
     nat_gateway_id = aws_nat_gateway.status_page_nat_gateway.id
   }
-
 
   tags = {
     Name = "Private Route Table for nat in status page"
@@ -114,7 +92,7 @@ resource "aws_route_table" "private_subnet_route_table" {
 # Associate the private route table with the private subnet
 resource "aws_route_table_association" "status_page_private_association" {
   route_table_id = aws_route_table.private_subnet_route_table.id
-  subnet_id = aws_subnet.status_page_private_subnet1.id
+  subnet_id      = aws_subnet.status_page_private_subnet1.id
 }
 
 
@@ -123,7 +101,6 @@ resource "aws_subnet" "status_page_public_subnet1" {
   vpc_id            = aws_vpc.status_page_vpc.id
   cidr_block        = "10.0.1.0/24"
   availability_zone = "us-east-2a"
-
 
   tags = {
     Name        = "status_page_public_subnet1"
@@ -137,7 +114,6 @@ resource "aws_subnet" "status_page_public_subnet2" {
   vpc_id            = aws_vpc.status_page_vpc.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = "us-east-2b"
-
 
   tags = {
     Name        = "status_page_public_subnet2"
@@ -176,20 +152,6 @@ resource "aws_subnet" "status_page_private_subnet2" {
 }
 
 
-# Create a route table for the private subnet
-resource "aws_route_table" "status_page_private_subnet_route_table" {
-  vpc_id = aws_vpc.status_page_vpc.id
-
-  route {
-    cidr_block     = "10.0.1.0/24"
-    nat_gateway_id = aws_nat_gateway.status_page_nat_gateway.id
-  }
-
-  tags = {
-    Name = "Private Route Table for nat in status page"
-  }
-}
-/*
 resource "aws_security_group" "bastion1_security_group" {
   name        = "bastion1_security_group"
   description = "Allow SSH access to bastion1 from my local pc"
@@ -202,7 +164,12 @@ resource "aws_security_group" "bastion1_security_group" {
     protocol    = "tcp"
     cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
   }
-
+   egress {
+    from_port   = 433
+    to_port     = 433
+    protocol    = "https"
+    cidr_blocks = ["0.0.0.0/0"]
+  }  
 
   tags = {
     Name        = "bastion1_security_group"
@@ -224,6 +191,12 @@ resource "aws_security_group" "bastion2_security_group" {
     cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
   }
 
+   egress {
+    from_port   = 433
+    to_port     = 433
+    protocol    = "https"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   tags = {
     Name        = "bastion2_security_group"
@@ -241,12 +214,46 @@ resource "aws_security_group" "production1_security_group" {
     from_port                = 22
     to_port                  = 22
     protocol                 = "tcp"
-    source_security_group_id = aws_security_group.bastion2_security_group.id
+    cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
   }
 
 
   tags = {
+    Environment = "prod"
     Name        = "production1_security_group"
     Description = "Allow SSH access to production1 from bastion security groups"
   }
-} */
+}
+
+resource "aws_security_group" "production2_security_group" {
+  name        = "production1_security_group"
+  description = "Allow SSH access to production1 from bastion security groups"
+  vpc_id      = aws_vpc.status_page_vpc.id
+
+  ingress {
+    from_port                = 22
+    to_port                  = 22
+    protocol                 = "tcp"
+    cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
+  }
+
+  tags = {
+    Name        = "production2_security_group"
+    Description = "Allow SSH access to production1 from bastion security groups"
+  }
+}
+
+resource "aws_waf_ipset" "status_page_waf" {
+  name = "status_page_waf"
+
+  ip_set_descriptors {
+    type  = "IPV4"
+    value = "192.0.7.0/24"
+  }
+}
+
+resource "aws_waf_rule" "wafrule" {
+  depends_on  = [aws_waf_ipset.ipset]
+  name        = "statuspageWAFRule"
+  metric_name = "statuspageWAF"
+}
