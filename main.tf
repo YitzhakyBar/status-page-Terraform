@@ -165,9 +165,9 @@ resource "aws_security_group" "bastion1_security_group" {
     cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
   }
    egress {
-    from_port   = 433
-    to_port     = 433
-    protocol    = "https"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }  
 
@@ -192,9 +192,9 @@ resource "aws_security_group" "bastion2_security_group" {
   }
 
    egress {
-    from_port   = 433
-    to_port     = 433
-    protocol    = "https"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -211,15 +211,20 @@ resource "aws_security_group" "production1_security_group" {
   vpc_id      = aws_vpc.status_page_vpc.id
 
   ingress {
-    from_port                = 22
-    to_port                  = 22
+    from_port                = 8000
+    to_port                  = 8000
     protocol                 = "tcp"
-    cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
+    security_groups = ["${aws_security_group.bastion1_sg.id}"]
   }
 
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  } 
 
   tags = {
-    Environment = "prod"
     Name        = "production1_security_group"
     Description = "Allow SSH access to production1 from bastion security groups"
   }
@@ -231,10 +236,18 @@ resource "aws_security_group" "production2_security_group" {
   vpc_id      = aws_vpc.status_page_vpc.id
 
   ingress {
-    from_port                = 22
-    to_port                  = 22
+    from_port                = 8000
+    to_port                  = 8000
     protocol                 = "tcp"
     cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
+    security_groups = ["${aws_security_group.bastion2_sg.id}"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -243,17 +256,195 @@ resource "aws_security_group" "production2_security_group" {
   }
 }
 
-resource "aws_waf_ipset" "status_page_waf" {
-  name = "status_page_waf"
 
-  ip_set_descriptors {
-    type  = "IPV4"
-    value = "192.0.7.0/24"
+
+
+
+
+ 
+
+
+
+
+
+# create a WAF rules
+variable "waf_rules" {
+  type    = list(string)
+  default = [
+    "AWSManagedRulesCommonRuleSet",
+    "AWSManagedRulesAmazonIpReputationList",
+    "AWSManagedRulesKnownBadInputsRuleSet",
+    "AWSManagedRulesLinuxRuleSet",
+    "AWSManagedRulesSQLiRuleSet",
+    "AWSManagedRulesWindowsRuleSet",
+    "AWSManagedRulesPHPRuleSet"
+  ]
+
+   tags = {
+    Name        = "status_page_waf_rules"
+  }
+
+
+}
+ # create the AWS WAF web ACL
+ resource "aws_wafv2_web_acl" "status_+page_WAF" {
+  name = var.waf_name
+
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name      = "AWSManagedRulesCommonRuleSet"
+    priority = 0
+    override_action {
+      none {}
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                 = "AWSManagedRulesCommonRuleSet"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name      = "AWSManagedRulesAmazonIpReputationList"
+    priority = 1
+    override_action {
+      none {}
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                 = "AWSManagedRulesAmazonIpReputationList"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.waf_rules
+    content {
+      name      = rule.value
+      priority = index(var.waf_rules, rule.value) + 2
+      override_action {
+        none {}
+      }
+      visibility_config {
+        cloudwatch_metrics_enabled = true
+        metric_name                 = rule.value
+        sampled_requests_enabled   = true
+      }
+    }
+  }
+
+  tags = {
+    AppName = var.app_name
   }
 }
 
-resource "aws_waf_rule" "wafrule" {
-  depends_on  = [aws_waf_ipset.ipset]
-  name        = "statuspageWAFRule"
-  metric_name = "statuspageWAF"
+
+
+
+
+
+
+
+# create ELB for the prodaction
+resource "aws_lb" "status_page_elb" {
+  name               = "status_page_elb"
+  internal           = true
+  load_balancer_type = "application"
+  subnets            = [aws_subnet.status_page_private_subnet1.id, aws_subnet.status_page_private_subnet2.id]
+
+  security_groups = [
+    aws_security_group.production1_security_group.id, aws_security_group.production2_security_group.id,
+  ]
+
+  tags = {
+    Name = "status_page-lb"
+  }
 }
+
+resource "aws_lb_listener" "stastus_page_lb_listener" {
+  load_balancer_arn = aws_lb.example.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08" -----
+  certificate_arn   = "arn:aws:acm:us-west-2:123456789012:certificate/abcd1234-5678-90ef-ghij-klmn1234abcd" ------
+
+  default_action {
+    target_group_arn = aws_lb_target_group.status_page_lb_target_group.arn
+    type             = "forward"
+  }
+}
+
+resource "aws_lb_target_group" "status_page_lb_target_group" {
+  name     = "status_page_lb_target_group"
+  port              = "443"
+  protocol          = "HTTPS"
+  vpc_id   = aws_vpc.status_page_vpc.id
+
+  health_check {
+    enabled = true
+    interval = 30
+    timeout = 5
+    protocol = "HTTPS"
+    path = "/"
+    matcher = "200-299"
+  }
+
+  stickiness {
+    type         = "lb_cookie"
+    cookie_duration = 600
+  }
+}
+
+# create a ECS cluster that deploys two EC2 instances  
+resource "aws_ecs_cluster" "status_page_ecs" {
+  name = "status_page_ecs"
+}
+
+resource "aws_ecs_task_definition" "status_page_task" {
+  family                   = "cluster-task"
+  container_definitions    = <<DEFINITION
+[
+  {
+    "name": "web",
+    "image": "nginx:latest", --- docker image ----
+    "portMappings": [
+      {
+        "containerPort": 8000,
+        "hostPort": 8000
+      }
+    ]
+    "environment": [
+      {
+        "name": "APP_ENV",
+        "value": "prod"
+      }
+    ]
+  }
+]
+DEFINITION
+}
+
+resource "aws_ecs_service" "status_page_ec2" {
+  name            = "ec2-service"
+  cluster         = aws_ecs_cluster.status_page_ecs.id
+  task_definition = aws_ecs_task_definition.status_page_task.arn
+  desired_count   = 2
+  launch_type     = "EC2"
+
+  network_configuration {
+    subnet_ids      = [aws_subnet.status_page_private_subnet1.id, aws_subnet.status_page_private_subnet2.id]
+    security_groups = [aws_security_group.production1_security_group.id, aws_security_group.production2_security_group.id]
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.status_page_lb_target_group.arn
+    container_name   = "web"
+    container_port   = 8000
+  }
+}
+ 
