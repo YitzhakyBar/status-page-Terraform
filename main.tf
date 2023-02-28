@@ -390,13 +390,18 @@ resource "aws_lb_target_group" "status_page_lb_target_group" {
     interval = 30
     timeout = 5
     protocol = "HTTPS"
+    port     = 443
     path = "/"
-    matcher = "200-299"
+    matcher = "200-399"
+    tls      = true 
   }
 
   stickiness {
     type         = "lb_cookie"
     cookie_duration = 600
+    cookie_name      = "sticky-cookie"
+    cookie_secure    = true
+    cookie_httponly  = true
   }
 }
 
