@@ -17,6 +17,7 @@ provider "aws" {
 
 # Create VPC
 resource "aws_vpc" "status_page_vpc" {
+
   cidr_block = "10.0.0.0/16"
 
   tags = {
@@ -120,7 +121,7 @@ resource "aws_route_table" "status_page_route_table_igw" {
   vpc_id = aws_vpc.status_page_vpc.id
 
   route {
-    cidr_block = "10.0.0.0/16"
+    cidr_block = "10.1.0.0/16"
     gateway_id = aws_internet_gateway.status_page_igw.id
   }
 
@@ -248,11 +249,9 @@ resource "aws_security_group" "bastion2_security_group" {
 }
 
 
-
-# create production1 security group
-resource "aws_security_group" "production1_security_group" {
-  name        = "production1_security_group"
-  description = "Allow SSH access to production1 from bastion security groups"
+# create a sg to elb 
+resource "aws_security_group" "alb_sg" {
+  name        = "alb_sg"
   vpc_id      = aws_vpc.status_page_vpc.id
 
   ingress {
@@ -270,49 +269,10 @@ resource "aws_security_group" "production1_security_group" {
   }
 
   tags = {
-    Name        = "production1_security_group"
-    Description = "Allow SSH access to production1 from bastion security groups"
+    Name        = "alb_sg"
   }
 }
 
-
-# create production2 security group
-resource "aws_security_group" "production2_security_group" {
-  name        = "production1_security_group"
-  description = "Allow SSH access to production1 from bastion security groups"
-  vpc_id      = aws_vpc.status_page_vpc.id
-
-  ingress {
-    from_port   = 8000
-    to_port     = 8000
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.1.0/24", "10.0.2.0/24"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name        = "production2_security_group"
-    Description = "Allow SSH access to production1 from bastion security groups"
-  }
-}  
-
-
-# create a sg to elb 
-resource "aws_security_group" "alb_sg" {
-  name_prefix = "alb_sg"
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
 
 # create ELB for the prodaction
 resource "aws_lb" "status_page_elb" {
@@ -365,7 +325,7 @@ resource "aws_lb_target_group" "status_page_lb_target_group" {
 
 
  
-# create a ECS cluster that deploys two EC2 instances  
+/* # create a ECS cluster that deploys two EC2 instances  
 resource "aws_ecs_cluster" "status_page_ecs" {
   name = "status_page_ecs"
 }
@@ -413,7 +373,7 @@ resource "aws_ecs_service" "status_page_ec2" {
     container_name   = "web"
     container_port   = 8000
   }
-}  
+}   */ 
 
 
 
@@ -495,15 +455,4 @@ variable "waf_rules" {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-*/
+*/ 
