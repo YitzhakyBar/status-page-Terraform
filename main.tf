@@ -249,6 +249,35 @@ resource "aws_security_group" "bastion2_security_group" {
 }
 
 
+resource "aws_security_group" "production_security_group" {
+  name = "production_security_group"
+  description = "Allow SSH access to production1 from bastion security groups"
+  vpc_id = aws_vpc.status_page_vpc.id
+
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    security_groups = [aws_security_group.bastion1_security_group.id]
+  }
+
+
+    ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    security_groups = [aws_security_group.bastion2_security_group.id]
+  }
+
+
+  tags = {
+    Name = "production_security_group"
+    Description = "Allow SSH access to production1 from bastion security groups"
+  }
+}
+
+
 # create a sg to elb 
 resource "aws_security_group" "alb_sg" {
   name        = "alb_sg"
@@ -274,7 +303,7 @@ resource "aws_security_group" "alb_sg" {
 }
 
 
-# create ELB for the prodaction
+# create LB for the prodaction
 resource "aws_lb" "status_page_elb" {
   name               = "StatusPageELB"
   internal           = true
@@ -323,20 +352,21 @@ resource "aws_lb_target_group" "status_page_lb_target_group" {
   }
 }
 
-
  
-/* # create a ECS cluster that deploys two EC2 instances  
+# create a ECS cluster that deploys two EC2 instances  
 resource "aws_ecs_cluster" "status_page_ecs" {
   name = "status_page_ecs"
 }
 
 resource "aws_ecs_task_definition" "status_page_task" {
-  family                   = "cluster-task"
+  family                   = "status_page_task"
   container_definitions    =  <<DEFINITION
 [
   {
-    "name": "web",
-    "image": "nginx:latest", 
+    "name": "status_page_app",
+    "image": "017697353720.dkr.ecr.ap-southeast-1.amazonaws.com/status-page-baron:1", 
+    "cpu": 256,
+    "memory": 512,
     "portMappings": [
       {
         "containerPort": 8000,
@@ -363,18 +393,37 @@ resource "aws_ecs_service" "status_page_ec2" {
   desired_count   = 2
   launch_type     = "EC2"
 
-  network_configuration {
-    subnets     = [aws_subnet.status_page_private_subnet1.id, aws_subnet.status_page_private_subnet2.id]
-    security_groups = [aws_security_group.production1_security_group.id, aws_security_group.production2_security_group.id]
-  }
+   /* network_configuration {
+    awsvpc_configuration {
+      subnets         = [aws_subnet.status_page_private_subnet1.id, aws_subnet.status_page_private_subnet2.id]
+      security_groups = [aws_security_group.production_security_group.id]
+    }
+  } */
 
   load_balancer {
     target_group_arn = aws_lb_target_group.status_page_lb_target_group.arn
-    container_name   = "web"
+    container_name   = "status_page_app"
     container_port   = 8000
   }
-}   */ 
+}    
 
+/* 
+?
+placement_constraints {
+    type       = "distinctInstance"
+    expression = "attribute:ecs.availability-zone"
+  }
+
+service_registries {
+    registry_arn = aws_service_discovery_private_dns_namespace.my_namespace.arn
+  }
+
+autoscaling {
+    min_capacity = 1
+    max_capacity = 10
+  }
+
+#create ASG TO THE PROUD AND TO BASRION  */
 
 
 
