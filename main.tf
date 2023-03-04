@@ -188,9 +188,9 @@ resource "aws_security_group" "bastion1_security_group" {
 
 
   ingress {
-    from_port = 22
-    to_port   = 22
-    protocol  = "tcp"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
     cidr_blocks = ["77.125.2.122/32", "77.137.65.124/32"]
   }
   egress {
@@ -218,7 +218,7 @@ resource "aws_instance" "status_page_bastion2" {
   tags = {
     Name = "status_page_bastion2"
   }
-} 
+}
 
 
 # create bastion2 security group
@@ -250,29 +250,29 @@ resource "aws_security_group" "bastion2_security_group" {
 
 
 resource "aws_security_group" "production_security_group" {
-  name = "production_security_group"
+  name        = "production_security_group"
   description = "Allow SSH access to production1 from bastion security groups"
-  vpc_id = aws_vpc.status_page_vpc.id
+  vpc_id      = aws_vpc.status_page_vpc.id
 
 
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
     security_groups = [aws_security_group.bastion1_security_group.id]
   }
 
 
-    ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
+  ingress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
     security_groups = [aws_security_group.bastion2_security_group.id]
   }
 
 
   tags = {
-    Name = "production_security_group"
+    Name        = "production_security_group"
     Description = "Allow SSH access to production1 from bastion security groups"
   }
 }
@@ -280,8 +280,8 @@ resource "aws_security_group" "production_security_group" {
 
 # create a sg to elb 
 resource "aws_security_group" "alb_sg" {
-  name        = "alb_sg"
-  vpc_id      = aws_vpc.status_page_vpc.id
+  name   = "alb_sg"
+  vpc_id = aws_vpc.status_page_vpc.id
 
   ingress {
     from_port   = 22
@@ -298,7 +298,7 @@ resource "aws_security_group" "alb_sg" {
   }
 
   tags = {
-    Name        = "alb_sg"
+    Name = "alb_sg"
   }
 }
 
@@ -320,8 +320,8 @@ resource "aws_lb_listener" "stastus_page_lb_listener" {
   load_balancer_arn = aws_lb.status_page_elb.arn
   port              = "80"
   protocol          = "HTTP"
-#  ssl_policy        = "ELBSecurityPolicy-2016-08" -----
-#  certificate_arn   = "arn:aws:acm:us-west-2:123456789012:certificate/abcd1234-5678-90ef-ghij-klmn1234abcd" ------
+  #  ssl_policy        = "ELBSecurityPolicy-2016-08" -----
+  #  certificate_arn   = "arn:aws:acm:us-west-2:123456789012:certificate/abcd1234-5678-90ef-ghij-klmn1234abcd" ------
 
   default_action {
     target_group_arn = aws_lb_target_group.status_page_lb_target_group.arn
@@ -331,59 +331,92 @@ resource "aws_lb_listener" "stastus_page_lb_listener" {
 
 resource "aws_lb_target_group" "status_page_lb_target_group" {
   name     = "StatusPageLBtargetGroup"
-  port              = "80"
-  protocol          = "HTTP"
+  port     = "80"
+  protocol = "HTTP"
   vpc_id   = aws_vpc.status_page_vpc.id
 
   health_check {
-    enabled = true
+    enabled  = true
     interval = 30
-    timeout = 5
+    timeout  = 5
     protocol = "HTTPS"
     port     = 80
-    path = "/"
-    matcher = "200-399" 
+    path     = "/"
+    matcher  = "200-399"
   }
 
   stickiness {
-    type         = "lb_cookie"
+    type            = "lb_cookie"
     cookie_duration = 600
-    cookie_name      = "sticky-cookie"
+    cookie_name     = "sticky-cookie"
   }
 }
 
- 
+
 # create a ECS cluster that deploys two EC2 instances  
 resource "aws_ecs_cluster" "status_page_ecs" {
   name = "status_page_ecs"
 }
 
+resource "aws_launch_template" "status_page_launch_template" {
+  name_prefix   = "status_page_launch_template"
+  image_id      = "ami-0f3c9c466bb525749" # Amazon Linux 2 AMI ID
+  instance_type = "t3.small"
+}
+
+# Specify the user data script to install the ECS agent and configure the instance
+/* user_data = <<-EOF
+              #!/bin/bash
+              echo ECS_CLUSTER=${aws_ecs_cluster.status_page_ecs.name} >> /etc/ecs/ecs.config
+              yum install -y aws-cfn-bootstrap
+              /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource ${AWS::StackName}ASG --region ${AWS::Region}
+              EOF
+} */
+
+resource "aws_autoscaling_group" "cluster_autoscaling_group" {
+  name_prefix = "cluster_autoscaling_group"
+  launch_template {
+  id      = aws_launch_template.status_page_launch_template.id
+  version = "$Latest"
+}
+
+  min_size                  = 1
+  max_size                  = 3
+  health_check_grace_period = 300
+  health_check_type         = "EC2"
+  vpc_zone_identifier   = [aws_subnet.status_page_private_subnet1.id]
+  target_group_arns     = [aws_lb_target_group.status_page_lb_target_group.arn]
+  tag {
+    key                 = "cluster_autoscaling_group"
+    value               = "production-instance"
+    propagate_at_launch = true
+  }
+}
+
 resource "aws_ecs_task_definition" "status_page_task" {
-  family                   = "status_page_task"
-  container_definitions    =  <<DEFINITION
-[
-  {
-    "name": "status_page_app",
-    "image": "017697353720.dkr.ecr.ap-southeast-1.amazonaws.com/status-page-baron:1", 
-    "cpu": 256,
-    "memory": 512,
-    "portMappings": [
+  family = "status_page_task"
+  container_definitions = jsonencode(
+    [
       {
-        "containerPort": 8000,
-        "hostPort": 8000
-      }
-    ],
-    "environment": [
-      {
-        "name": "APP_ENV",
-        "value": "prod"
+        "name" : "status_page_app",
+        "image" : "017697353720.dkr.ecr.ap-southeast-1.amazonaws.com/status-page-baron:1",
+        "cpu" : 256,
+        "memory" : 512,
+        "portMappings" : [
+          {
+            "containerPort" : 8000,
+            "hostPort" : 8000
+          }
+        ],
+        "environment" : [
+          {
+            "name" : "APP_ENV",
+            "value" : "prod"
+          }
+        ]
       }
     ]
-  }
-]
-
-  DEFINITION
-
+  )
 }
 
 resource "aws_ecs_service" "status_page_ec2" {
@@ -393,7 +426,7 @@ resource "aws_ecs_service" "status_page_ec2" {
   desired_count   = 2
   launch_type     = "EC2"
 
-   /* network_configuration {
+  /* network_configuration {
     awsvpc_configuration {
       subnets         = [aws_subnet.status_page_private_subnet1.id, aws_subnet.status_page_private_subnet2.id]
       security_groups = [aws_security_group.production_security_group.id]
@@ -405,7 +438,7 @@ resource "aws_ecs_service" "status_page_ec2" {
     container_name   = "status_page_app"
     container_port   = 8000
   }
-}    
+}
 
 /* 
 ?
