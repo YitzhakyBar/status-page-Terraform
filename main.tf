@@ -173,6 +173,7 @@ resource "aws_instance" "status_page_bastion1" {
   key_name               = "key_bar_ron"
   subnet_id              = aws_subnet.status_page_public_subnet1.id
   vpc_security_group_ids = [aws_security_group.bastion1_security_group.id]
+  associate_public_ip_address = true
 
   tags = {
     Name = "status_page_bastion1"
@@ -214,6 +215,7 @@ resource "aws_instance" "status_page_bastion2" {
   key_name               = "key_bar_ron"
   subnet_id              = aws_subnet.status_page_public_subnet2.id
   vpc_security_group_ids = [aws_security_group.bastion2_security_group.id]
+  associate_public_ip_address = true
 
   tags = {
     Name = "status_page_bastion2"
@@ -320,7 +322,7 @@ resource "aws_lb_listener" "stastus_page_lb_listener" {
   load_balancer_arn = aws_lb.status_page_elb.arn
   port              = "80"
   protocol          = "HTTP"
-  #  ssl_policy        = "ELBSecurityPolicy-2016-08" -----
+  #  ssl_policy        = "ELBSecurityPolicy-2016-08" 
   #  certificate_arn   = "arn:aws:acm:us-west-2:123456789012:certificate/abcd1234-5678-90ef-ghij-klmn1234abcd" ------
 
   default_action {
@@ -339,7 +341,7 @@ resource "aws_lb_target_group" "status_page_lb_target_group" {
     enabled  = true
     interval = 30
     timeout  = 5
-    protocol = "HTTPS"
+    protocol = "HTTP"
     port     = 80
     path     = "/"
     matcher  = "200-399"
@@ -360,8 +362,13 @@ resource "aws_ecs_cluster" "status_page_ecs" {
 
 resource "aws_launch_template" "status_page_launch_template" {
   name_prefix   = "status_page_launch_template"
-  image_id      = "ami-0f3c9c466bb525749" # Amazon Linux 2 AMI ID
+  image_id      = "ami-00eeedc4036573771" 
+  key_name      = "key_bar_ron"
   instance_type = "t3.small"
+
+  tags = {
+    Name = "app_server"
+  }
 }
 
 # Specify the user data script to install the ECS agent and configure the instance
