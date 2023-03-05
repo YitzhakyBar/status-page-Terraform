@@ -15,6 +15,8 @@ provider "aws" {
 }
 
 
+#____________________________________________________________________
+# NETWORK
 # Create VPC
 resource "aws_vpc" "status_page_vpc" {
 
@@ -25,6 +27,7 @@ resource "aws_vpc" "status_page_vpc" {
     Description = "This is a VPC for status_page infrastructure"
   }
 }
+
 
 # create an EIP for NAT gateway
 resource "aws_eip" "EIP_NAT" {
@@ -87,6 +90,9 @@ resource "aws_route_table" "status_page_route_table_igw" {
   }
 }
 
+
+#____________________________________________________________________
+# SUBNETS
 # Create private subnet 1
 resource "aws_subnet" "status_page_private_subnet1" {
   vpc_id            = aws_vpc.status_page_vpc.id
@@ -120,6 +126,8 @@ resource "aws_route_table_association" "status_page_private_association2" {
   route_table_id = aws_route_table.status_page_route_table_nat.id
   subnet_id      = aws_subnet.status_page_private_subnet2.id
 }
+
+
 
 # Create public subnet 1
 resource "aws_subnet" "status_page_public_subnet1" {
@@ -159,7 +167,8 @@ resource "aws_route_table_association" "public_subnet_assoc2" {
 }
 
 
-
+#____________________________________________________________________
+# BASTIONS
 # create a bastion1
 resource "aws_instance" "status_page_bastion1" {
   ami                    = "ami-082b1f4237bd816a1"
@@ -269,7 +278,8 @@ resource "aws_security_group" "production_security_group" {
   }
 }
 
-
+#____________________________________________________________________
+# ELB
 # create a sg to elb 
 resource "aws_security_group" "alb_sg" {
   name   = "alb_sg"
@@ -342,7 +352,8 @@ resource "aws_lb_target_group" "target_group_lb_status_page" {
 #   target_id        = aws_instance.example.id
 # }
 
-
+#____________________________________________________________________
+# ECS
 # create a ECS cluster that deploys two EC2 instances  
 resource "aws_ecs_cluster" "status_page_ecs" {
   name = "status_page_ecs"
@@ -438,25 +449,6 @@ resource "aws_ecs_service" "status_page_ec2" {
   }
 }
 
-/* 
-?
-placement_constraints {
-    type       = "distinctInstance"
-    expression = "attribute:ecs.availability-zone"
-  }
-
-service_registries {
-    registry_arn = aws_service_discovery_private_dns_namespace.my_namespace.arn
-  }
-
-autoscaling {
-    min_capacity = 1
-    max_capacity = 10
-  }
-
-#create ASG TO THE PROUD AND TO BASRION  */
-
-
 
 
 /* # create a WAF rules
@@ -537,6 +529,8 @@ variable "waf_rules" {
 
 */ 
 
+#____________________________________________________________________
+# POSGRESQL
 # Create rds security group
 resource "aws_security_group" "rds_sg" {
   name        = "rds_security_group"
