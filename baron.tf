@@ -15,6 +15,8 @@ provider "aws" {
 }
 
 
+#____________________________________________________________________
+# NETWORK
 # Create VPC
 resource "aws_vpc" "status_page_vpc" {
 
@@ -87,6 +89,9 @@ resource "aws_route_table" "status_page_route_table_igw" {
   }
 }
 
+
+#____________________________________________________________________
+# SUBNETS
 # Create private subnet 1
 resource "aws_subnet" "status_page_private_subnet1" {
   vpc_id            = aws_vpc.status_page_vpc.id
@@ -159,7 +164,8 @@ resource "aws_route_table_association" "public_subnet_assoc2" {
 }
 
 
-
+#____________________________________________________________________
+# BASTIONS
 # create a bastion1
 resource "aws_instance" "status_page_bastion1" {
   ami                    = "ami-03f6a11788f8e319e" #amazon linux 2
@@ -270,6 +276,8 @@ resource "aws_security_group" "production_security_group" {
 }
 
 
+#____________________________________________________________________
+# ELB
 # create a sg to elb 
 resource "aws_security_group" "alb_sg" {
   name   = "alb_sg"
@@ -369,8 +377,9 @@ resource "aws_autoscaling_attachment" "asg_attachment_bar" {
   lb_target_group_arn    = aws_lb_target_group.target_group_lb_status_page.arn
 }
 
-#_____________________________________________________________________________________________________
 
+#_____________________________________________________________________________________________________
+# ECS
 # Create a ECS cluster that deploys two tasks on the production EC2 instances  
 # Create a security group for tasks
 resource "aws_security_group" "ecs_task_sg" {
