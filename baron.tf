@@ -15,8 +15,6 @@ provider "aws" {
 }
 
 
-#____________________________________________________________________
-# NETWORK
 # Create VPC
 resource "aws_vpc" "status_page_vpc" {
 
@@ -89,9 +87,6 @@ resource "aws_route_table" "status_page_route_table_igw" {
   }
 }
 
-
-#____________________________________________________________________
-# SUBNETS
 # Create private subnet 1
 resource "aws_subnet" "status_page_private_subnet1" {
   vpc_id            = aws_vpc.status_page_vpc.id
@@ -164,8 +159,7 @@ resource "aws_route_table_association" "public_subnet_assoc2" {
 }
 
 
-#____________________________________________________________________
-# BASTIONS
+
 # create a bastion1
 resource "aws_instance" "status_page_bastion1" {
   ami                    = "ami-03f6a11788f8e319e" #amazon linux 2
@@ -192,6 +186,13 @@ resource "aws_security_group" "bastion1_security_group" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
   }
   tags = {
     Name        = "bastion1_security_group"
@@ -227,6 +228,13 @@ resource "aws_security_group" "bastion2_security_group" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
   tags = {
     Name        = "bastion2_security_group"
     Description = "security group for 2nd bastion"
@@ -256,8 +264,8 @@ resource "aws_security_group" "production_security_group" {
   }
 
   ingress {
-    from_port       = 80
-    to_port         = 80
+    from_port       = 8000
+    to_port         = 8000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
   }
@@ -276,17 +284,22 @@ resource "aws_security_group" "production_security_group" {
 }
 
 
-#____________________________________________________________________
-# ELB
 # create a sg to elb 
 resource "aws_security_group" "alb_sg" {
   name   = "alb_sg"
   vpc_id = aws_vpc.status_page_vpc.id
 
   ingress {
-    from_port   = 8000
-    to_port     = 8000
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -325,6 +338,7 @@ resource "aws_lb_target_group" "target_group_lb_status_page" {
   port     = "8000"
   protocol = "HTTP"
   vpc_id   = aws_vpc.status_page_vpc.id
+  deregistration_delay = 30
   
   health_check {
     healthy_threshold   = 3
@@ -339,6 +353,9 @@ resource "aws_lb_target_group" "target_group_lb_status_page" {
 #_________________________________________________________________________________________________________________________
 # create autoscaling group and launch tenplate for production
 resource "aws_launch_template" "status_page_launch_template" {
+  iam_instance_profile {
+    name = "ecs_agent"
+  }
   name_prefix   = "status_page_launch_template"
   image_id      = "ami-0e9a0ac4214f2ebe1" # ECS-Optimized Amazon Linux 2 AMI ID
   instance_type = "t3.small"
@@ -377,9 +394,8 @@ resource "aws_autoscaling_attachment" "asg_attachment_bar" {
   lb_target_group_arn    = aws_lb_target_group.target_group_lb_status_page.arn
 }
 
-
 #_____________________________________________________________________________________________________
-# ECS
+
 # Create a ECS cluster that deploys two tasks on the production EC2 instances  
 # Create a security group for tasks
 resource "aws_security_group" "ecs_task_sg" {
@@ -424,16 +440,17 @@ resource "aws_ecs_task_definition" "status_page_task" {
   container_definitions = jsonencode(
     [
       {
-        "name" : "status_page_container",
-        "image" : "017697353720.dkr.ecr.ap-southeast-1.amazonaws.com/status-page-baron:latest",
-        "cpu" : 2,
-        "memory" : 512,
-        "essential": true,
-        "portMappings" : [
+        name      = "status_page_container",
+        cpu       = 1,
+        memory    = 512,
+        essential = true,
+        image     = "017697353720.dkr.ecr.ap-southeast-1.amazonaws.com/status-page-baron:3",
+        # "environment": [],
+        portMappings = [
           {
-            "containerPort" : 8000,
-            "hostPort" : 8000,
-            "protocol": "tcp"
+            containerPort = 8000,
+            hostPort = 8000,
+            protocol = "tcp"
           }
         ]
           
@@ -534,6 +551,13 @@ resource "aws_security_group" "rds_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.production_security_group.id]
   }
+  
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
 }
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name        = "rds_subnet_group"
@@ -579,8 +603,14 @@ resource "aws_security_group" "redis_sg" {
     protocol = "tcp"
     security_groups = [aws_security_group.production_security_group.id]
   }
-}
 
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+}
 #Create elasticache subnet group
 resource "aws_elasticache_subnet_group" "elasticache_subnet_group" {
   name       = "elasticache-subnet-group"
@@ -604,4 +634,5 @@ resource "aws_elasticache_cluster" "elasticache_cluster" {
   subnet_group_name    = aws_elasticache_subnet_group.elasticache_subnet_group.name
   parameter_group_name = "default.redis7"
   port                 = 6379
+  security_group_ids = [aws_security_group.redis_sg.id]
 }
