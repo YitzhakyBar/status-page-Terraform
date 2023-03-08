@@ -376,8 +376,8 @@ resource "aws_autoscaling_group" "prod_autoscaling_group" {
   id      = aws_launch_template.status_page_launch_template.id
   version = "$Latest"
   }
-  min_size                  = 1
-  max_size                  = 3
+  min_size                  = 2
+  max_size                  = 4
   health_check_grace_period = 300
   health_check_type         = "EC2"
   target_group_arns     = [aws_lb_target_group.target_group_lb_status_page.arn]
@@ -421,11 +421,6 @@ resource "aws_ecs_service" "ecs_service" {
   task_definition = aws_ecs_task_definition.status_page_task.arn
   desired_count   = 1
   launch_type     = "EC2"
-  # network_configuration {
-  #   subnets = [aws_subnet.status_page_public_subnet1.id]
-  #   security_groups  = [aws_security_group.ecs_task_sg.id]
-  #   assign_public_ip = false
-  # }
   load_balancer {
     target_group_arn = aws_lb_target_group.target_group_lb_status_page.arn
     container_name   = "status_page_container"
